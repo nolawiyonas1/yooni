@@ -45,22 +45,26 @@ Android App (Kotlin)                         Raspberry Pi
 
 ```
 yooni/
-├── android/                     # Native Android app (Kotlin)
+├── android/                           # Native Android app (Kotlin)
 │   ├── app/
+│   │   ├── build.gradle.kts           # App dependencies (openai-kotlin, ktor, porcupine)
 │   │   └── src/main/
-│   │       ├── java/.../yooni/
-│   │       │   ├── WakeWordService.kt    # Porcupine "Hey Yooni" listener
-│   │       │   ├── VoiceManager.kt       # Recording, Whisper STT, TTS playback
-│   │       │   ├── ActionFormatter.kt    # LLM formats raw command into clean action
-│   │       │   ├── ConfirmationLoop.kt   # Confirm/refine loop before execution
-│   │       │   ├── PiClient.kt           # Sends confirmed commands to Raspberry Pi
-│   │       │   └── MainActivity.kt
-│   │       └── res/
-│   └── build.gradle.kts
-├── pi/                          # Raspberry Pi server
-│   ├── server.py                # WebSocket/HTTP server receiving commands
-│   └── executor.py              # Passes commands to mobile-use
-├── voice.py                     # Standalone voice module (dev/testing)
-├── requirements.txt
-└── .env
+│   │       ├── AndroidManifest.xml
+│   │       └── java/com/example/yooni/
+│   │           ├── MainActivity.kt        # App entry point
+│   │           ├── WakeWordService.kt     # Porcupine "Hey Yooni" listener (planned)
+│   │           ├── VoiceManager.kt        # Recording, Whisper STT, TTS (planned)
+│   │           ├── ActionFormatter.kt     # LLM formats command (planned)
+│   │           ├── ConfirmationLoop.kt    # Confirm/refine loop (planned)
+│   │           ├── PiClient.kt            # Sends commands to Pi (planned)
+│   │           └── ui/theme/
+│   │               ├── Color.kt
+│   │               ├── Theme.kt
+│   │               └── Type.kt
+│   ├── build.gradle.kts               # Root Gradle config
+│   └── settings.gradle.kts
+├── pi/                                # Raspberry Pi server (planned)
+│   ├── server.py                      # Receives commands from Android app
+│   └── executor.py                    # Passes commands to mobile-use
+└── README.md
 ```
