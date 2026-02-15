@@ -46,6 +46,7 @@ class VoiceManager(
     private var audioRecord: AudioRecord? = null
     private var isRecording = false
     private var audioData = ByteArrayOutputStream()
+    private var mediaPlayer: MediaPlayer? = null
 
     /**
      * Start recording from the microphone.
@@ -197,13 +198,43 @@ class VoiceManager(
         connection.disconnect()
 
         withContext(Dispatchers.Main) {
-            val player = MediaPlayer()
-            player.setDataSource(tempFile.absolutePath)
-            player.prepare()
-            player.start()
-            player.setOnCompletionListener {
-                it.release()
-                tempFile.delete()
+            // Release previous player if any
+            mediaPlayer?.release()
+            mediaPlayer = null
+
+            try {
+                mediaPlayer = MediaPlayer().apply {
+                    setDataSource(tempFile.absolutePath)
+                    prepare()
+                    start()
+                    setOnCompletionListener {
+                        it.release()
+                        mediaPlayer = null
+                        try {
+                            if (tempFile.exists()) tempFile.delete()
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error deleting temp file", e)
+                        }
+                    }
+                    setOnErrorListener { mp, what, extra ->
+                        Log.e(TAG, "MediaPlayer error: what=$what, extra=$extra")
+                        mp.release()
+                        mediaPlayer = null
+                        try {
+                            if (tempFile.exists()) tempFile.delete()
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error deleting temp file on error", e)
+                        }
+                        true
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error initializing MediaPlayer", e)
+                try {
+                    if (tempFile.exists()) tempFile.delete()
+                } catch (delEx: Exception) {
+                    Log.e(TAG, "Error deleting temp file after init failure", delEx)
+                }
             }
         }
     }
