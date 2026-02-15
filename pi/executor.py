@@ -25,7 +25,7 @@ def execute(command: str) -> tuple[bool, str]:
 
     try:
         cwd = os.path.expanduser("~/Documents/mobile-use")
-        venv_path = os.path.join(cwd, "venv")
+        venv_path = os.path.join(cwd, ".venv")
 
         # Build command that activates venv and runs mobile-use
         # Using bash -c to activate venv and run command in same shell
