@@ -3,9 +3,7 @@ Passes confirmed commands from the Android app to mobile-use.
 Assumes mobile-use is installed and configured on the Pi.
 """
 
-import os
 import subprocess
-import sys
 
 
 def execute(command: str) -> tuple[bool, str]:
@@ -21,22 +19,10 @@ def execute(command: str) -> tuple[bool, str]:
     if not command or not command.strip():
         return False, "Empty command"
 
-    # Use the venv Python from the mobile-use directory (sibling to this repo)
-    venv_python = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "mobile-use",
-        "venv",
-        "bin",
-        "python"
-    )
-
-    # Fall back to sys.executable if venv not found
-    python_executable = venv_python if os.path.exists(venv_python) else sys.executable
-
     try:
         # Run with output streaming to terminal (no capture)
         result = subprocess.run(
-            [python_executable, "-m", "minitap.mobile_use.main", command.strip()],
+            ["python3", "-m", "minitap.mobile_use.main", command.strip()],
             timeout=300,  # 5 min max for long-running tasks
         )
         if result.returncode == 0:
