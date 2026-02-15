@@ -81,7 +81,7 @@ fun VoiceTestScreen(
     modifier: Modifier = Modifier
 ) {
     var isRecording by remember { mutableStateOf(false) }
-    var statusText by remember { mutableStateOf("Tap the button or say 'Porcupine'") }
+    var statusText by remember { mutableStateOf("Tap the button or say 'Hey yooni'") }
     var transcriptionText by remember { mutableStateOf("") }
     var actionPreviewText by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
