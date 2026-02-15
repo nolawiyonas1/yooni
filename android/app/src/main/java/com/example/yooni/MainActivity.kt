@@ -7,8 +7,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -21,6 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.yooni.BuildConfig
@@ -85,9 +85,22 @@ fun VoiceTestScreen(
     var actionPreviewText by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
 
-    val logoGradient = Brush.horizontalGradient(
+    val logoGradient = Brush.linearGradient(
         colors = listOf(YooniPink, YooniBlue)
     )
+    
+    // Breathing animation for idle state
+    val infiniteTransition = rememberInfiniteTransition(label = "breathing")
+    val scale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.08f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1500, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "scale"
+    )
+
     val buttonSize by animateDpAsState(
         targetValue = if (isRecording) 260.dp else 220.dp,
         animationSpec = tween(durationMillis = 300),
@@ -109,6 +122,12 @@ fun VoiceTestScreen(
             Box(
                 modifier = Modifier
                     .size(36.dp)
+                    .shadow(
+                        elevation = 8.dp,
+                        shape = CircleShape,
+                        spotColor = Color.Black,
+                        ambientColor = Color.Black
+                    )
                     .clip(CircleShape)
                     .background(logoGradient)
             )
@@ -131,8 +150,19 @@ fun VoiceTestScreen(
         ) {
             Box(
                 modifier = Modifier
+                    .graphicsLayer {
+                        if (!isRecording) {
+                            scaleX = scale
+                            scaleY = scale
+                        }
+                    }
                     .size(buttonSize)
-                    .shadow(16.dp, CircleShape, ambientColor = Color.Black.copy(alpha = 0.12f), spotColor = Color.Black.copy(alpha = 0.08f))
+                    .shadow(
+                        elevation = 24.dp,
+                        shape = CircleShape,
+                        spotColor = Color.Black,
+                        ambientColor = Color.Black
+                    )
                     .clip(CircleShape)
                     .background(logoGradient)
                     .clickable {
@@ -172,7 +202,7 @@ fun VoiceTestScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = if (isRecording) "Stop" else "Speak",
+                    text = "",
                     fontSize = 20.sp,
                     color = Color.White
                 )

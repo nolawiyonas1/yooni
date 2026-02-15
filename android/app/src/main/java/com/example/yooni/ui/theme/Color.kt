@@ -11,6 +11,6 @@ val PurpleGrey40 = Color(0xFF625b71)
 val Pink40 = Color(0xFF7D5260)
 
 // Yooni brand gradient and text
-val YooniPink = Color(0xFFF8BBD9)
-val YooniBlue = Color(0xFFB3E5FC)
+val YooniPink = Color(0xFFFFADCB)
+val YooniBlue = Color(0xFF70EAFF)
 val YooniTextDark = Color(0xFF424242)
