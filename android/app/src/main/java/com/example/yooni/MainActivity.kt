@@ -7,13 +7,26 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.yooni.BuildConfig
+import com.example.yooni.ui.theme.YooniBlue
+import com.example.yooni.ui.theme.YooniPink
+import com.example.yooni.ui.theme.YooniTextDark
 import com.example.yooni.ui.theme.YooniTheme
 import kotlinx.coroutines.launch
 
@@ -42,11 +55,17 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             YooniTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                Scaffold(
+                    modifier = Modifier.fillMaxSize(),
+                    containerColor = Color.White
+                ) { innerPadding ->
                     VoiceTestScreen(
                         voiceManager = voiceManager,
                         actionFormatter = actionFormatter,
-                        modifier = Modifier.padding(innerPadding)
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding)
+                            .background(Color.White)
                     )
                 }
             }
@@ -66,129 +85,194 @@ fun VoiceTestScreen(
     var actionPreviewText by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
 
+    val logoGradient = Brush.linearGradient(
+        colors = listOf(YooniPink, YooniBlue)
+    )
+    
+    // Breathing animation for idle state
+    val infiniteTransition = rememberInfiniteTransition(label = "breathing")
+    val scale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.08f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1500, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "scale"
+    )
+
+    val buttonSize by animateDpAsState(
+        targetValue = if (isRecording) 260.dp else 220.dp,
+        animationSpec = tween(durationMillis = 300),
+        label = "buttonSize"
+    )
+
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+            .background(Color.White)
     ) {
-        Text(
-            text = "Yooni",
-            fontSize = 32.sp,
-            style = MaterialTheme.typography.headlineLarge
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(
-            text = statusText,
-            fontSize = 16.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        Button(
-            onClick = {
-                if (!isRecording) {
-                    isRecording = true
-                    statusText = "Listening..."
-                    transcriptionText = ""
-                    // Don't clear actionPreviewText here so we can refine it
-                    voiceManager.startRecording()
-                } else {
-                    isRecording = false
-                    statusText = "Thinking..."
-                    voiceManager.stopRecording()
-
-                    scope.launch {
-                        val userText = voiceManager.transcribe()
-                        transcriptionText = userText
-                        
-                        if (userText.isNotBlank()) {
-                            val response = if (actionPreviewText.isEmpty()) {
-                                // New conversation
-                                statusText = "Formatting..."
-                                actionFormatter.format(userText)
-                            } else {
-                                // Follow-up / refinement
-                                statusText = "Refining..."
-                                actionFormatter.refine(userText)
-                            }
-                            
-                            actionPreviewText = response
-                            statusText = "Confirming..."
-                            voiceManager.speak(response)
-                            statusText = "Ready to execute?"
-                        } else {
-                            statusText = "Didn't catch that."
-                        }
-                    }
-                }
-            },
-            modifier = Modifier.size(120.dp),
-            shape = MaterialTheme.shapes.extraLarge,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = if (isRecording)
-                    MaterialTheme.colorScheme.error
-                else
-                    MaterialTheme.colorScheme.primary
-            )
+        // Top-left logo: gradient circle + "yooni" text
+        Row(
+            modifier = Modifier
+                .padding(start = 24.dp, top = 24.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
         ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .shadow(
+                        elevation = 8.dp,
+                        shape = CircleShape,
+                        spotColor = Color.Black,
+                        ambientColor = Color.Black
+                    )
+                    .clip(CircleShape)
+                    .background(logoGradient)
+            )
+            Spacer(modifier = Modifier.width(10.dp))
             Text(
-                text = if (isRecording) "Stop" else "Speak",
-                fontSize = 20.sp
+                text = "yooni",
+                fontSize = 22.sp,
+                color = YooniTextDark,
+                style = MaterialTheme.typography.titleMedium
             )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        // Center: large gradient circle (record button) with shadow
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .graphicsLayer {
+                        if (!isRecording) {
+                            scaleX = scale
+                            scaleY = scale
+                        }
+                    }
+                    .size(buttonSize)
+                    .shadow(
+                        elevation = 24.dp,
+                        shape = CircleShape,
+                        spotColor = Color.Black,
+                        ambientColor = Color.Black
+                    )
+                    .clip(CircleShape)
+                    .background(logoGradient)
+                    .clickable {
+                        if (!isRecording) {
+                            isRecording = true
+                            statusText = "Listening..."
+                            transcriptionText = ""
+                            voiceManager.startRecording()
+                        } else {
+                            isRecording = false
+                            statusText = "Thinking..."
+                            voiceManager.stopRecording()
 
-        if (actionPreviewText.isNotEmpty()) {
-            TextButton(onClick = { 
-                actionPreviewText = "" 
-                statusText = "New conversation started"
-            }) {
-                Text("Start Over")
+                            scope.launch {
+                                val userText = voiceManager.transcribe()
+                                transcriptionText = userText
+
+                                if (userText.isNotBlank()) {
+                                    val response = if (actionPreviewText.isEmpty()) {
+                                        statusText = "Formatting..."
+                                        actionFormatter.format(userText)
+                                    } else {
+                                        statusText = "Refining..."
+                                        actionFormatter.refine(userText)
+                                    }
+
+                                    actionPreviewText = response
+                                    statusText = "Confirming..."
+                                    voiceManager.speak(response)
+                                    statusText = "Ready to execute?"
+                                } else {
+                                    statusText = "Didn't catch that."
+                                }
+                            }
+                        }
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "",
+                    fontSize = 20.sp,
+                    color = Color.White
+                )
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        if (transcriptionText.isNotEmpty()) {
+        // Bottom: status, actions, transcription, card
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
             Text(
-                text = "You said:",
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = statusText,
+                fontSize = 16.sp,
+                color = YooniTextDark.copy(alpha = 0.7f)
             )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = transcriptionText,
-                fontSize = 18.sp
-            )
-        }
 
-        Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-        if (actionPreviewText.isNotEmpty()) {
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer
-                ),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "Yooni will:",
-                        fontSize = 14.sp,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = actionPreviewText,
-                        fontSize = 18.sp,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
+            if (actionPreviewText.isNotEmpty()) {
+                TextButton(
+                    onClick = {
+                        actionPreviewText = ""
+                        statusText = "New conversation started"
+                    }
+                ) {
+                    Text("Start Over", color = YooniTextDark)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (transcriptionText.isNotEmpty()) {
+                Text(
+                    text = "You said:",
+                    fontSize = 14.sp,
+                    color = YooniTextDark.copy(alpha = 0.7f)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = transcriptionText,
+                    fontSize = 18.sp,
+                    color = YooniTextDark
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            if (actionPreviewText.isNotEmpty()) {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = YooniPink.copy(alpha = 0.2f)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "Yooni will:",
+                            fontSize = 14.sp,
+                            color = YooniTextDark.copy(alpha = 0.8f)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = actionPreviewText,
+                            fontSize = 18.sp,
+                            color = YooniTextDark
+                        )
+                    }
                 }
             }
         }
