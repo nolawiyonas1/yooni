@@ -34,15 +34,14 @@ def execute(command: str) -> tuple[bool, str]:
     python_executable = venv_python if os.path.exists(venv_python) else sys.executable
 
     try:
+        # Run with output streaming to terminal (no capture)
         result = subprocess.run(
             [python_executable, "-m", "minitap.mobile_use.main", command.strip()],
-            capture_output=True,
-            text=True,
             timeout=300,  # 5 min max for long-running tasks
         )
         if result.returncode == 0:
-            return True, result.stdout or "Done"
-        return False, result.stderr or result.stdout or f"Exit code {result.returncode}"
+            return True, "Command completed successfully"
+        return False, f"Command failed with exit code {result.returncode}"
     except subprocess.TimeoutExpired:
         return False, "Task timed out"
     except FileNotFoundError:
