@@ -5,7 +5,9 @@ Then POST to http://<pi-ip>:8080/execute with JSON {"command": "..."}
 """
 
 import logging
+import os
 from contextlib import asynccontextmanager
+from logging.handlers import RotatingFileHandler
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.responses import JSONResponse
@@ -13,10 +15,26 @@ from pydantic import BaseModel, Field
 
 from executor import execute
 
-# Configure logging
+# Configure logging to both console and file
+log_dir = os.path.join(os.path.dirname(__file__), "logs")
+os.makedirs(log_dir, exist_ok=True)
+log_file = os.path.join(log_dir, "yooni-pi.log")
+
+# Create formatters and handlers
+formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+
+# Console handler
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(formatter)
+
+# File handler with rotation (10MB max, keep 5 backups)
+file_handler = RotatingFileHandler(log_file, maxBytes=10*1024*1024, backupCount=5)
+file_handler.setFormatter(formatter)
+
+# Configure root logger
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    handlers=[console_handler, file_handler]
 )
 logger = logging.getLogger(__name__)
 

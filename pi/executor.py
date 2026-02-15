@@ -40,13 +40,26 @@ def execute(command: str) -> tuple[bool, str]:
         env = os.environ.copy()
         env["PYTHONIOENCODING"] = "utf-8"
 
-        # Run with output streaming to terminal (no capture)
+        # Run and capture output for logging
         result = subprocess.run(
             ["bash", "-c", bash_cmd],
             cwd=cwd,
             env=env,
             timeout=300,  # 5 min max for long-running tasks
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace"  # Handle any encoding issues gracefully
         )
+
+        # Log mobile-use output
+        if result.stdout:
+            logger.info("mobile-use output:")
+            for line in result.stdout.splitlines():
+                if line.strip():  # Skip empty lines
+                    logger.info(f"  {line}")
+
         if result.returncode == 0:
             return True, "Command completed successfully"
         return False, f"Command failed with exit code {result.returncode}"
