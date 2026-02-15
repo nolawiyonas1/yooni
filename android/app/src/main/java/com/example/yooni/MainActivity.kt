@@ -47,7 +47,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         val apiKey = BuildConfig.OPENAI_API_KEY
-        voiceManager = VoiceManager(this, apiKey)
+        val picovoiceKey = BuildConfig.PICOVOICE_ACCESS_KEY
+        voiceManager = VoiceManager(this, apiKey, picovoiceKey)
         actionFormatter = ActionFormatter(apiKey)
 
         micPermission.launch(Manifest.permission.RECORD_AUDIO)
@@ -80,10 +81,57 @@ fun VoiceTestScreen(
     modifier: Modifier = Modifier
 ) {
     var isRecording by remember { mutableStateOf(false) }
-    var statusText by remember { mutableStateOf("Tap the button and speak") }
+    var statusText by remember { mutableStateOf("Tap the button or say 'Porcupine'") }
     var transcriptionText by remember { mutableStateOf("") }
     var actionPreviewText by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
+
+    // Wake Word Handler
+    DisposableEffect(Unit) {
+        voiceManager.onWakeWordDetected = {
+            if (!isRecording) {
+                isRecording = true
+                statusText = "Listening..."
+                transcriptionText = ""
+                voiceManager.startRecording()
+            }
+        }
+        
+        voiceManager.onRecordingStopped = {
+            isRecording = false
+            statusText = "Thinking..."
+            
+            // Re-enable wake word detection after processing
+            voiceManager.startWakeWordDetection()
+
+            scope.launch {
+                val userText = voiceManager.transcribe()
+                transcriptionText = userText
+
+                if (userText.isNotBlank()) {
+                    val response = if (actionPreviewText.isEmpty()) {
+                        statusText = "Formatting..."
+                        actionFormatter.format(userText)
+                    } else {
+                        statusText = "Refining..."
+                        actionFormatter.refine(userText)
+                    }
+
+                    actionPreviewText = response
+                    statusText = "Confirming..."
+                    voiceManager.speak(response)
+                    statusText = "Ready to execute?"
+                } else {
+                    statusText = "Didn't catch that."
+                }
+            }
+        }
+
+        voiceManager.startWakeWordDetection()
+        onDispose {
+            voiceManager.stopWakeWordDetection()
+        }
+    }
 
     val logoGradient = Brush.linearGradient(
         colors = listOf(YooniPink, YooniBlue)
@@ -170,33 +218,12 @@ fun VoiceTestScreen(
                             isRecording = true
                             statusText = "Listening..."
                             transcriptionText = ""
+                            voiceManager.stopWakeWordDetection()
                             voiceManager.startRecording()
                         } else {
-                            isRecording = false
-                            statusText = "Thinking..."
+                            // Manual Stop
                             voiceManager.stopRecording()
-
-                            scope.launch {
-                                val userText = voiceManager.transcribe()
-                                transcriptionText = userText
-
-                                if (userText.isNotBlank()) {
-                                    val response = if (actionPreviewText.isEmpty()) {
-                                        statusText = "Formatting..."
-                                        actionFormatter.format(userText)
-                                    } else {
-                                        statusText = "Refining..."
-                                        actionFormatter.refine(userText)
-                                    }
-
-                                    actionPreviewText = response
-                                    statusText = "Confirming..."
-                                    voiceManager.speak(response)
-                                    statusText = "Ready to execute?"
-                                } else {
-                                    statusText = "Didn't catch that."
-                                }
-                            }
+                            voiceManager.onRecordingStopped?.invoke()
                         }
                     },
                 contentAlignment = Alignment.Center

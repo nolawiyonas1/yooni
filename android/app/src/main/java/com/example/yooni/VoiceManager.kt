@@ -21,32 +21,103 @@ import java.net.URL
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
+import ai.picovoice.porcupine.PorcupineManager
+import ai.picovoice.porcupine.PorcupineException
+import ai.picovoice.porcupine.Porcupine
+import android.os.Handler
+import android.os.Looper
+
 /**
- * Handles mic recording, Whisper speech-to-text, and OpenAI TTS playback.
- *
- * Usage:
- *   val vm = VoiceManager(context, "your-openai-api-key")
- *   vm.startRecording()
- *   // ... user speaks ...
- *   vm.stopRecording()
- *   val text = vm.transcribe()   // sends audio to Whisper
- *   vm.speak("You said: $text")  // plays TTS
+ * Handles mic recording, Whisper speech-to-text, OpenAI TTS, and Wake Word detection.
  */
 class VoiceManager(
     private val context: Context,
-    private val apiKey: String
+    private val apiKey: String,
+    private val picovoiceKey: String
 ) {
     companion object {
         private const val TAG = "VoiceManager"
         private const val SAMPLE_RATE = 16000
         private const val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO
         private const val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT
+        
+        // Silence detection constants
+        private const val SILENCE_THRESHOLD = 500 // Amplitude threshold for silence
+        private const val MAX_SILENCE_DURATION_MS = 1500L // 1.5 seconds of silence stops recording
+        private const val MIN_RECORDING_DURATION_MS = 1000L // Minimum recording time before stopping
     }
 
     private var audioRecord: AudioRecord? = null
     private var isRecording = false
     private var audioData = ByteArrayOutputStream()
     private var mediaPlayer: MediaPlayer? = null
+    
+    // Auto-Stop Callback
+    var onRecordingStopped: (() -> Unit)? = null
+
+    // Wake Word
+    private var porcupineManager: PorcupineManager? = null
+    var onWakeWordDetected: (() -> Unit)? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    init {
+        initPorcupine()
+    }
+
+    private fun initPorcupine() {
+        if (picovoiceKey.isEmpty()) {
+            Log.w(TAG, "Picovoice key is empty, wake word disabled")
+            return
+        }
+        try {
+            // Copy wake word file from assets if needed
+            val wakeWordFile = File(context.filesDir, "hey_yooni.ppn")
+            if (!wakeWordFile.exists()) {
+                context.assets.open("hey_yooni.ppn").use { input ->
+                    FileOutputStream(wakeWordFile).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+            }
+
+            porcupineManager = PorcupineManager.Builder()
+                .setAccessKey(picovoiceKey)
+                .setKeywordPath(wakeWordFile.absolutePath)
+                .setSensitivity(0.7f)
+                .build(context) { keywordIndex ->
+                    Log.d(TAG, "Wake word detected: Hey Yooni")
+                    stopWakeWordDetection()
+                    mainHandler.post {
+                        onWakeWordDetected?.invoke()
+                    }
+                }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to initialize Porcupine", e)
+        }
+    }
+
+    fun startWakeWordDetection() {
+        if (porcupineManager == null) {
+             // Try re-init if key was added later or failed transiently
+             initPorcupine()
+        }
+        try {
+            porcupineManager?.start()
+            Log.d(TAG, "Wake word detection started")
+        } catch (e: PorcupineException) {
+            Log.e(TAG, "Failed to start wake word detection", e)
+        }
+    }
+
+    fun stopWakeWordDetection() {
+        try {
+            porcupineManager?.stop()
+            Log.d(TAG, "Wake word detection stopped")
+        } catch (e: PorcupineException) {
+            Log.e(TAG, "Failed to stop wake word detection", e)
+        }
+    }
+
 
     /**
      * Start recording from the microphone.
@@ -77,10 +148,41 @@ class VoiceManager(
         // Read audio in a background thread
         Thread {
             val buffer = ByteArray(bufferSize)
+            var silenceStartTimestamp = -1L
+            val recordingStartTime = System.currentTimeMillis()
+
             while (isRecording) {
                 val read = audioRecord?.read(buffer, 0, buffer.size) ?: 0
                 if (read > 0) {
                     audioData.write(buffer, 0, read)
+                    
+                    // --- Auto-Stop Logic ---
+                    val maxAmplitude = calculateAmplitude(buffer, read)
+                    val currentTime = System.currentTimeMillis()
+                    
+                    // Only start checking for silence after minimum duration (e.g. 1s)
+                    if (currentTime - recordingStartTime > MIN_RECORDING_DURATION_MS) {
+                        if (maxAmplitude < SILENCE_THRESHOLD) {
+                            if (silenceStartTimestamp == -1L) {
+                                silenceStartTimestamp = currentTime
+                            } else if (currentTime - silenceStartTimestamp > MAX_SILENCE_DURATION_MS) {
+                                Log.d(TAG, "Silence detected ($maxAmplitude < $SILENCE_THRESHOLD), stopping recording automatically.")
+                                stopRecording()
+                                // Notify UI on Main Thread
+                                mainHandler.post {
+                                    onRecordingStopped?.invoke()
+                                }
+                                break
+                            }
+                        } else {
+                            // User is speaking (amplitude > threshold), reset silence timer
+                            silenceStartTimestamp = -1L
+                        }
+                    } else {
+                         // Reset silence timer during warm-up period
+                         silenceStartTimestamp = -1L
+                    }
+                    // -----------------------
                 }
             }
         }.start()
@@ -89,12 +191,33 @@ class VoiceManager(
     }
 
     /**
+     * Calculate max amplitude from PCM buffer.
+     */
+    private fun calculateAmplitude(buffer: ByteArray, readSize: Int): Int {
+        var max = 0
+        for (i in 0 until readSize step 2) {
+            // PCM 16-bit is stored as two bytes (little-endian)
+            if (i + 1 < readSize) {
+                val sample = (buffer[i + 1].toInt() shl 8) or (buffer[i].toInt() and 0xFF)
+                val amplitude = Math.abs(sample.toShort().toInt())
+                if (amplitude > max) max = amplitude
+            }
+        }
+        return max
+    }
+
+    /**
      * Stop recording.
      */
     fun stopRecording() {
+        if (!isRecording) return
         isRecording = false
-        audioRecord?.stop()
-        audioRecord?.release()
+        try {
+            audioRecord?.stop()
+            audioRecord?.release()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping recorder", e)
+        }
         audioRecord = null
         Log.d(TAG, "Recording stopped, ${audioData.size()} bytes captured")
     }
@@ -231,10 +354,13 @@ class VoiceManager(
             } catch (e: Exception) {
                 Log.e(TAG, "Error initializing MediaPlayer", e)
                 try {
-                    if (tempFile.exists()) tempFile.delete()
+                    if (tempFile.exists()) {
+                        tempFile.delete()
+                    }
                 } catch (delEx: Exception) {
                     Log.e(TAG, "Error deleting temp file after init failure", delEx)
                 }
+                Unit
             }
         }
     }

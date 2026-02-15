@@ -33,6 +33,8 @@ android {
 
         // Makes API key available as BuildConfig.OPENAI_API_KEY
         buildConfigField("String", "OPENAI_API_KEY", "\"${localProperties.getProperty("OPENAI_API_KEY", "")}\"")
+        // Makes Picovoice Access Key available as BuildConfig.PICOVOICE_ACCESS_KEY
+        buildConfigField("String", "PICOVOICE_ACCESS_KEY", "\"${localProperties.getProperty("PICOVOICE_ACCESS_KEY", "")}\"")
     }
 
     buildTypes {
@@ -70,6 +72,9 @@ dependencies {
     // OpenAI API (Whisper, Chat, TTS)
     implementation("com.aallam.openai:openai-client:4.1.0")
     implementation("io.ktor:ktor-client-okhttp:3.0.0")
+
+    // Picovoice Porcupine (Wake Word)
+    implementation("ai.picovoice:porcupine-android:4.0.0")
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
