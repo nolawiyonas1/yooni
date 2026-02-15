@@ -6,6 +6,8 @@ Assumes mobile-use is installed and configured on the Pi.
 import logging
 import os
 import subprocess
+import time
+from threading import Thread
 
 logger = logging.getLogger(__name__)
 
@@ -40,32 +42,75 @@ def execute(command: str) -> tuple[bool, str]:
         env = os.environ.copy()
         env["PYTHONIOENCODING"] = "utf-8"
 
-        # Run and capture output for logging
-        result = subprocess.run(
+        # Start the process
+        process = subprocess.Popen(
             ["bash", "-c", bash_cmd],
             cwd=cwd,
             env=env,
-            timeout=300,  # 5 min max for long-running tasks
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             encoding="utf-8",
-            errors="replace"  # Handle any encoding issues gracefully
+            errors="replace",
+            bufsize=1  # Line buffered
         )
 
-        # Log mobile-use output
-        if result.stdout:
-            logger.info("mobile-use output:")
-            for line in result.stdout.splitlines():
-                if line.strip():  # Skip empty lines
-                    logger.info(f"  {line}")
+        # Track output and last activity time
+        output_lines = []
+        last_activity = time.time()
+        idle_timeout = 300  # 5 minutes of no output
 
-        if result.returncode == 0:
+        logger.info("mobile-use output:")
+
+        # Read output line by line
+        try:
+            while True:
+                line = process.stdout.readline()
+
+                if line:
+                    # We got output, update activity time
+                    last_activity = time.time()
+                    output_lines.append(line)
+
+                    # Log the line
+                    if line.strip():
+                        logger.info(f"  {line.rstrip()}")
+
+                # Check if process has finished
+                if process.poll() is not None:
+                    # Process finished, read any remaining output
+                    remaining = process.stdout.read()
+                    if remaining:
+                        output_lines.append(remaining)
+                        for line in remaining.splitlines():
+                            if line.strip():
+                                logger.info(f"  {line}")
+                    break
+
+                # Check for idle timeout (only if no line was read)
+                if not line:
+                    time.sleep(0.1)  # Small sleep to avoid busy waiting
+                    if time.time() - last_activity > idle_timeout:
+                        logger.warning("Process idle for 5 minutes, terminating...")
+                        process.terminate()
+                        try:
+                            process.wait(timeout=5)
+                        except subprocess.TimeoutExpired:
+                            process.kill()
+                            process.wait()
+                        return False, "Task timed out due to inactivity (no output for 5 minutes)"
+
+        finally:
+            process.stdout.close()
+
+        returncode = process.returncode
+
+        if returncode == 0:
             return True, "Command completed successfully"
-        return False, f"Command failed with exit code {result.returncode}"
-    except subprocess.TimeoutExpired:
-        return False, "Task timed out"
+        return False, f"Command failed with exit code {returncode}"
+
     except FileNotFoundError:
         return False, "mobile-use not found (pip install mobile-use)"
     except Exception as e:
+        logger.exception("Error executing command")
         return False, str(e)
