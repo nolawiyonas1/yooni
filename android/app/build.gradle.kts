@@ -3,6 +3,18 @@ plugins {
     alias(libs.plugins.jetbrains.kotlin.android)
 }
 
+// Load API key from local.properties (gitignored)
+import java.io.FileInputStream
+import java.util.Properties
+
+val localProperties = Properties()
+val localFile = rootProject.file("local.properties")
+if (localFile.exists()) {
+    FileInputStream(localFile).use { stream ->
+        localProperties.load(stream)
+    }
+}
+
 android {
     namespace = "com.example.yooni"
     compileSdk = 34
@@ -18,6 +30,9 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        // Makes API key available as BuildConfig.OPENAI_API_KEY
+        buildConfigField("String", "OPENAI_API_KEY", "\"${localProperties.getProperty("OPENAI_API_KEY", "")}\"")
     }
 
     buildTypes {
@@ -38,6 +53,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.1"
@@ -50,6 +66,10 @@ android {
 }
 
 dependencies {
+
+    // OpenAI API (Whisper, Chat, TTS)
+    implementation("com.aallam.openai:openai-client:4.1.0")
+    implementation("io.ktor:ktor-client-okhttp:3.0.0")
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
