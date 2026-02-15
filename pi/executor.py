@@ -3,7 +3,11 @@ Passes confirmed commands from the Android app to mobile-use.
 Assumes mobile-use is installed and configured on the Pi.
 """
 
+import logging
+import os
 import subprocess
+
+logger = logging.getLogger(__name__)
 
 
 def execute(command: str) -> tuple[bool, str]:
@@ -20,9 +24,16 @@ def execute(command: str) -> tuple[bool, str]:
         return False, "Empty command"
 
     try:
+        cmd = ["python3", "-m", "minitap.mobile_use.main", command.strip()]
+        cwd = os.getcwd()
+
+        logger.info(f"Launching mobile-use:")
+        logger.info(f"  Command: {' '.join(cmd)}")
+        logger.info(f"  Working directory: {cwd}")
+
         # Run with output streaming to terminal (no capture)
         result = subprocess.run(
-            ["python3", "-m", "minitap.mobile_use.main", command.strip()],
+            cmd,
             timeout=300,  # 5 min max for long-running tasks
         )
         if result.returncode == 0:
