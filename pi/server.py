@@ -1,63 +1,109 @@
 """
 HTTP server that receives commands from the Android app and passes them to mobile-use.
-Run: python server.py
+Run: uvicorn server:app --host 0.0.0.0 --port 8080
 Then POST to http://<pi-ip>:8080/execute with JSON {"command": "..."}
 """
 
-import json
 import logging
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
 from executor import execute
 
-logging.basicConfig(level=logging.INFO)
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
-HOST = "0.0.0.0"
-PORT = 8080
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for startup/shutdown events."""
+    logger.info("Yooni Pi server starting up on 0.0.0.0:8080")
+    yield
+    logger.info("Yooni Pi server shutting down")
 
 
-class CommandHandler(BaseHTTPRequestHandler):
-    def do_POST(self):
-        if self.path != "/execute":
-            self._send(405, {"error": "Method not allowed"})
-            return
+app = FastAPI(
+    title="Yooni Pi Server",
+    description="Receives commands from Android app and passes them to mobile-use",
+    version="1.0.0",
+    lifespan=lifespan,
+)
 
-        try:
-            content_length = int(self.headers.get("Content-Length", 0))
-            body = self.rfile.read(content_length)
-            data = json.loads(body) if body else {}
-            command = data.get("command", "")
-        except json.JSONDecodeError as e:
-            self._send(400, {"error": f"Invalid JSON: {e}"})
-            return
 
-        if not command:
-            self._send(400, {"error": "Missing 'command' field"})
-            return
+class CommandRequest(BaseModel):
+    """Request model for command execution."""
+    command: str = Field(..., min_length=1, description="Natural language command to execute")
 
-        logger.info("Executing: %s", command[:80] + ("..." if len(command) > 80 else ""))
+
+class CommandResponse(BaseModel):
+    """Response model for command execution."""
+    success: bool
+    message: str
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Global exception handler that logs all unhandled exceptions with traces."""
+    logger.exception("Unhandled exception while processing request to %s", request.url.path)
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"error": "Internal server error"}
+    )
+
+
+@app.post("/execute", response_model=CommandResponse)
+async def execute_command(request: CommandRequest):
+    """
+    Execute a natural language command via mobile-use.
+
+    Args:
+        request: CommandRequest containing the command to execute
+
+    Returns:
+        CommandResponse with success status and message
+
+    Raises:
+        HTTPException: 500 if command execution fails
+    """
+    command = request.command.strip()
+
+    logger.info("Executing: %s", command[:80] + ("..." if len(command) > 80 else ""))
+
+    try:
         success, message = execute(command)
-        logger.info("Result: success=%s", success)
+        logger.info("Result: success=%s, message=%s", success, message[:100] if len(message) > 100 else message)
 
-        status = 200 if success else 500
-        self._send(status, {"success": success, "message": message})
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=message
+            )
 
-    def _send(self, status: int, data: dict):
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.end_headers()
-        self.wfile.write(json.dumps(data).encode())
+        return CommandResponse(success=True, message=message)
 
-    def log_message(self, format, *args):
-        logger.info("%s - %s", self.address_string(), format % args)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Error executing command: %s", command[:80])
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Command execution failed: {str(e)}"
+        )
 
 
-def main():
-    server = HTTPServer((HOST, PORT), CommandHandler)
-    logger.info("Yooni Pi server listening on %s:%d", HOST, PORT)
-    server.serve_forever()
+@app.get("/health")
+async def health_check():
+    """Health check endpoint."""
+    return {"status": "healthy"}
 
 
 if __name__ == "__main__":
-    main()
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8080)

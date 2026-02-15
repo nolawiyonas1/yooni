@@ -3,8 +3,11 @@ Passes confirmed commands from the Android app to mobile-use.
 Assumes mobile-use is installed and configured on the Pi.
 """
 
+import logging
+import os
 import subprocess
-import sys
+
+logger = logging.getLogger(__name__)
 
 
 def execute(command: str) -> tuple[bool, str]:
@@ -21,15 +24,32 @@ def execute(command: str) -> tuple[bool, str]:
         return False, "Empty command"
 
     try:
+        cwd = os.path.expanduser("~/Documents/mobile-use")
+        venv_path = os.path.join(cwd, ".venv")
+
+        # Build command that activates venv and runs mobile-use
+        # Using bash -c to activate venv and run command in same shell
+        bash_cmd = f'source "{venv_path}/bin/activate" && python -m minitap.mobile_use.main "{command.strip()}"'
+
+        logger.info(f"Launching mobile-use:")
+        logger.info(f"  Venv: {venv_path}")
+        logger.info(f"  Command: {bash_cmd}")
+        logger.info(f"  Working directory: {cwd}")
+
+        # Set up environment with UTF-8 encoding to handle emojis
+        env = os.environ.copy()
+        env["PYTHONIOENCODING"] = "utf-8"
+
+        # Run with output streaming to terminal (no capture)
         result = subprocess.run(
-            [sys.executable, "-m", "minitap.mobile_use.main", command.strip()],
-            capture_output=True,
-            text=True,
+            ["bash", "-c", bash_cmd],
+            cwd=cwd,
+            env=env,
             timeout=300,  # 5 min max for long-running tasks
         )
         if result.returncode == 0:
-            return True, result.stdout or "Done"
-        return False, result.stderr or result.stdout or f"Exit code {result.returncode}"
+            return True, "Command completed successfully"
+        return False, f"Command failed with exit code {result.returncode}"
     except subprocess.TimeoutExpired:
         return False, "Task timed out"
     except FileNotFoundError:
