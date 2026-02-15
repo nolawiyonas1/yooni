@@ -24,10 +24,16 @@ def execute(command: str) -> tuple[bool, str]:
         return False, "Empty command"
 
     try:
-        cmd = ["python3", "-m", "minitap.mobile_use.main", command.strip()]
         cwd = os.path.expanduser("~/Documents/mobile-use")
 
+        # Use venv python if available, otherwise fallback to system python3
+        venv_python = os.path.join(cwd, "venv", "bin", "python")
+        python_executable = venv_python if os.path.exists(venv_python) else "python3"
+
+        cmd = [python_executable, "-m", "minitap.mobile_use.main", command.strip()]
+
         logger.info(f"Launching mobile-use:")
+        logger.info(f"  Python: {python_executable}")
         logger.info(f"  Command: {' '.join(cmd)}")
         logger.info(f"  Working directory: {cwd}")
 
