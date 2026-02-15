@@ -25,21 +25,20 @@ def execute(command: str) -> tuple[bool, str]:
 
     try:
         cwd = os.path.expanduser("~/Documents/mobile-use")
+        venv_path = os.path.join(cwd, "venv")
 
-        # Use venv python if available, otherwise fallback to system python3
-        venv_python = os.path.join(cwd, "venv", "bin", "python")
-        python_executable = venv_python if os.path.exists(venv_python) else "python3"
-
-        cmd = [python_executable, "-m", "minitap.mobile_use.main", command.strip()]
+        # Build command that activates venv and runs mobile-use
+        # Using bash -c to activate venv and run command in same shell
+        bash_cmd = f'source "{venv_path}/bin/activate" && python -m minitap.mobile_use.main "{command.strip()}"'
 
         logger.info(f"Launching mobile-use:")
-        logger.info(f"  Python: {python_executable}")
-        logger.info(f"  Command: {' '.join(cmd)}")
+        logger.info(f"  Venv: {venv_path}")
+        logger.info(f"  Command: {bash_cmd}")
         logger.info(f"  Working directory: {cwd}")
 
         # Run with output streaming to terminal (no capture)
         result = subprocess.run(
-            cmd,
+            ["bash", "-c", bash_cmd],
             cwd=cwd,
             timeout=300,  # 5 min max for long-running tasks
         )
