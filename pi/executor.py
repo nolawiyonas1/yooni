@@ -36,10 +36,15 @@ def execute(command: str) -> tuple[bool, str]:
         logger.info(f"  Command: {bash_cmd}")
         logger.info(f"  Working directory: {cwd}")
 
+        # Set up environment with UTF-8 encoding to handle emojis
+        env = os.environ.copy()
+        env["PYTHONIOENCODING"] = "utf-8"
+
         # Run with output streaming to terminal (no capture)
         result = subprocess.run(
             ["bash", "-c", bash_cmd],
             cwd=cwd,
+            env=env,
             timeout=300,  # 5 min max for long-running tasks
         )
         if result.returncode == 0:
