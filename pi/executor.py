@@ -25,7 +25,7 @@ def execute(command: str) -> tuple[bool, str]:
 
     try:
         cmd = ["python3", "-m", "minitap.mobile_use.main", command.strip()]
-        cwd = os.getcwd()
+        cwd = os.path.expanduser("~/Documents/mobile-use")
 
         logger.info(f"Launching mobile-use:")
         logger.info(f"  Command: {' '.join(cmd)}")
@@ -34,6 +34,7 @@ def execute(command: str) -> tuple[bool, str]:
         # Run with output streaming to terminal (no capture)
         result = subprocess.run(
             cmd,
+            cwd=cwd,
             timeout=300,  # 5 min max for long-running tasks
         )
         if result.returncode == 0:
